@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 import { api, getApiErrorMessage } from "../api/client";
 import { AppShell } from "../components/AppShell";
-import { statusLabels } from "../constants/clinic";
+import { QueueStatusCard } from "../components/QueueStatusCard";
+import { Alert } from "../components/ui/alert";
 import { usePatientAuthStore } from "../stores/patientAuthStore";
 import type { Visit } from "../types/clinic";
 
@@ -28,27 +29,11 @@ export function QueueStatusScreen() {
 
   return (
     <AppShell>
-      {error && <p className="alert">{error}</p>}
+      {error && <Alert tone="error">{error}</Alert>}
       {visit ? (
-        <div className="queue-status">
-          <p className="eyebrow">Nomor Antrean</p>
-          <div className="queue-number">#{visit.queueNumber}</div>
-          <h2>{statusLabels[visit.status] ?? visit.status}</h2>
-          <p>{visit.waitingAhead && visit.waitingAhead > 0 ? `${visit.waitingAhead} pasien menunggu sebelum Anda.` : "Silakan tunggu panggilan petugas."}</p>
-          <div className="summary-list">
-            <div>
-              <span>Dokter</span>
-              <strong>{visit.doctor.name}</strong>
-            </div>
-            <div>
-              <span>Kode kunjungan</span>
-              <strong>{visit.visitNumber}</strong>
-            </div>
-          </div>
-          <Link className="secondary-button" to="/check-in">Daftar Konsultasi Lagi</Link>
-        </div>
+        <QueueStatusCard visit={visit} />
       ) : (
-        <p className="loading-text">Memuat status antrean...</p>
+        <p className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-sm">Memuat status antrean...</p>
       )}
     </AppShell>
   );

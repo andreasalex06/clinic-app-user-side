@@ -1,19 +1,29 @@
 import type { ReactNode } from "react";
+import { useLocation } from "react-router-dom";
+import { usePatientAuthStore } from "../stores/patientAuthStore";
+import { PatientNav } from "./PatientNav";
 
 type AppShellProps = {
   children: ReactNode;
 };
 
 export function AppShell({ children }: AppShellProps) {
+  const location = useLocation();
+  const token = usePatientAuthStore((state) => state.token);
+  const showNav = Boolean(token) && !["/login", "/register"].includes(location.pathname);
+
   return (
     <main className="app-shell">
-      <section className="phone-frame">
-        <header className="app-header">
-          <p className="eyebrow">ClinicApp Patient</p>
-          <h1>Sarana Medika</h1>
-        </header>
-        {children}
-      </section>
+      <div className="app-container">
+        <div className={showNav ? "grid gap-5 md:gap-6" : "mx-auto grid min-h-[calc(100svh-2rem)] w-full max-w-md content-center gap-4"}>
+          {showNav && <PatientNav />}
+          <section className="min-w-0">
+            <div className="content-grid">
+              {children}
+            </div>
+          </section>
+        </div>
+      </div>
     </main>
   );
 }
