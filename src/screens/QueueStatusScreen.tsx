@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
 import { api, getApiErrorMessage } from "../api/client";
+import { createPatientSocket } from "../api/socket";
 import { AppShell } from "../components/AppShell";
 import { QueueStatusCard } from "../components/QueueStatusCard";
 import { Alert } from "../components/ui/alert";
@@ -13,15 +14,38 @@ export function QueueStatusScreen() {
   const [visit, setVisit] = useState<Visit | null>(null);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  const loadQueueStatus = useCallback(async () => {
     if (!visitId) {
       return;
     }
 
-    api.get<{ data: Visit }>(`/public/queue/${visitId}`)
-      .then((response) => setVisit(response.data.data))
-      .catch((err) => setError(getApiErrorMessage(err, "Status antrean gagal dimuat.")));
+    try {
+      const response = await api.get<{ data: Visit }>(`/public/queue/${visitId}`);
+
+      setVisit(response.data.data);
+      setError("");
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Status antrean gagal dimuat."));
+    }
   }, [visitId]);
+
+  useEffect(() => {
+    void loadQueueStatus();
+  }, [loadQueueStatus]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const socket = createPatientSocket(token);
+
+    socket.on("queue:changed", () => {
+      void loadQueueStatus();
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [loadQueueStatus, token, visitId]);
 
   if (!token) {
     return <Navigate to="/login" replace />;

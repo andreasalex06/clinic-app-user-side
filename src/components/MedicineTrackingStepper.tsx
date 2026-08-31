@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Circle, CreditCard, PackageCheck, Pill, ReceiptText, Ticket } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
+import { createPatientSocket } from "../api/socket";
+import { MidtransPaymentButton } from "./MidtransPaymentButton";
 import { Alert } from "./ui/alert";
 import { Badge } from "./ui/badge";
 import { Card, CardContent } from "./ui/card";
 import { formatQueueCode } from "../lib/queue";
+import { usePatientAuthStore } from "../stores/patientAuthStore";
 import type { PharmacyOrder, PharmacyStatus } from "../types/clinic";
 
 const trackingSteps: Array<{
@@ -68,40 +71,55 @@ function getStatusLabel(status: PharmacyStatus) {
 }
 
 export function MedicineTrackingStepper() {
+  const token = usePatientAuthStore((state) => state.token);
   const [order, setOrder] = useState<PharmacyOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const loadTracking = useCallback(async () => {
+    try {
+      const response = await api.get<{ data: PharmacyOrder | null }>("/public/pharmacy/active");
+
+      setOrder(response.data.data);
+      setError("");
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Tracking obat gagal dimuat."));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
 
-    async function loadTracking() {
-      try {
-        const response = await api.get<{ data: PharmacyOrder | null }>("/public/pharmacy/active");
-
-        if (isMounted) {
-          setOrder(response.data.data);
-          setError("");
-        }
-      } catch (err) {
-        if (isMounted) {
-          setError(getApiErrorMessage(err, "Tracking obat gagal dimuat."));
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+    function loadIfMounted() {
+      if (isMounted) {
+        void loadTracking();
       }
     }
 
-    void loadTracking();
-    const intervalId = window.setInterval(loadTracking, 5000);
+    loadIfMounted();
+    const intervalId = window.setInterval(loadIfMounted, 5000);
 
     return () => {
       isMounted = false;
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [loadTracking]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const socket = createPatientSocket(token);
+
+    socket.on("pharmacy:changed", () => {
+      void loadTracking();
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [loadTracking, token]);
 
   if (loading) {
     return (
@@ -187,22 +205,31 @@ export function MedicineTrackingStepper() {
         <div className="relative grid gap-0">
           {trackingSteps.map((step, index) => (
             <div key={step.status} className="grid grid-cols-[auto_minmax(0,1fr)] gap-3">
-              <div className="relative grid justify-items-center">
-                <div className={index <= activeStep ? "grid size-9 place-items-center rounded-md bg-slate-950 text-white" : "grid size-9 place-items-center rounded-md bg-slate-100 text-slate-400"}>
+              <div className="relative flex justify-center">
+                {index < trackingSteps.length - 1 && (
+                  <div className={index < activeStep ? "absolute bottom-0 left-1/2 top-9 w-px -translate-x-1/2 bg-teal-200" : "absolute bottom-0 left-1/2 top-9 w-px -translate-x-1/2 bg-slate-200"} />
+                )}
+                <div className={index <= activeStep ? "relative z-10 grid size-9 place-items-center rounded-md bg-slate-950 text-white" : "relative z-10 grid size-9 place-items-center rounded-md bg-slate-100 text-slate-400"}>
                   {(() => {
                     const Icon = index <= activeStep ? getStepIcon(step.status) : Circle;
                     return <Icon className="size-4" />;
                   })()}
                 </div>
-                {index < trackingSteps.length - 1 && (
-                  <div className={index < activeStep ? "h-full min-h-10 w-px bg-teal-200" : "h-full min-h-10 w-px bg-slate-200"} />
-                )}
               </div>
               <div className="min-w-0 pb-4">
                 <div className="flex min-w-0 items-center justify-between gap-3">
                   <p className="font-semibold text-slate-950">{step.label}</p>
                 </div>
                 <p className="mt-1 text-sm leading-6 text-slate-500">{step.description}</p>
+                {step.status === "WAITING_PAYMENT" && order.status === "WAITING_PAYMENT" && order.visit.invoice?.status === "UNPAID" && (
+                  <div className="mt-3 sm:max-w-xs">
+                    <MidtransPaymentButton
+                      key={order.visit.invoice.id}
+                      invoiceId={order.visit.invoice.id}
+                      onPaymentUpdate={loadTracking}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           ))}

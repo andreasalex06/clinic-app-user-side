@@ -43,7 +43,7 @@ export function CheckInScreen() {
         const doctorData = response.data.data;
 
         setDoctors(doctorData);
-        setDoctorId(doctorData[0]?.id ?? "");
+        setDoctorId("");
       } catch (err) {
         setError(
           getApiErrorMessage(err, "Data dokter gagal dimuat.")
