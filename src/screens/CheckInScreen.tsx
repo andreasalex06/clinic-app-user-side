@@ -116,10 +116,10 @@ export function CheckInScreen() {
 
   return (
     <AppShell>
-      <div className="mx-auto grid w-full max-w-2xl gap-5">
+      <div className="mx-auto grid w-full min-w-0 max-w-2xl gap-5">
         {/* Patient identity */}
-        <Card className="border border-slate-200 bg-white shadow-sm">
-          <CardContent className="flex min-h-[104px] items-center gap-4 px-5 py-5 sm:px-6">
+        <Card className="min-w-0 max-w-full border border-slate-200 bg-white shadow-sm">
+          <CardContent className="flex min-h-[104px] min-w-0 items-center gap-3 px-4 py-5 sm:gap-4 sm:px-6">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-base font-semibold text-slate-700 ring-1 ring-inset ring-slate-200">
               {patientInitial}
             </div>
@@ -139,7 +139,7 @@ export function CheckInScreen() {
         </Card>
 
         {/* Consultation */}
-        <Card className="overflow-hidden border border-slate-200 bg-white shadow-sm">
+        <Card className="min-w-0 max-w-full overflow-hidden border border-slate-200 bg-white shadow-sm">
           <CardHeader className="space-y-2 border-b border-slate-100 px-5 py-5 sm:px-6">
             <div>
               <h1 className="text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
@@ -153,9 +153,9 @@ export function CheckInScreen() {
             </p>
           </CardHeader>
 
-          <CardContent className="px-5 py-6 sm:px-6">
+          <CardContent className="min-w-0 px-4 py-5 sm:px-6 sm:py-6">
             <form
-              className="flex flex-col gap-6"
+              className="flex min-w-0 flex-col gap-6"
               onSubmit={handleSubmit}
             >
               {error && (
@@ -165,7 +165,7 @@ export function CheckInScreen() {
               )}
 
               {/* Doctor selector */}
-              <div className="space-y-3">
+              <div className="min-w-0 space-y-3">
                 <div className="space-y-1">
                   <Label
                     htmlFor="doctor-search"
@@ -179,7 +179,7 @@ export function CheckInScreen() {
                   </p>
                 </div>
 
-                <div className="relative">
+                <div className="relative min-w-0">
                   <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                   <Input
                     id="doctor-search"

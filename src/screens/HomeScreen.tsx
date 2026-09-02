@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link as RouterLink, Navigate, useNavigate } from "react-router-dom";
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, LogOut, Search, Stethoscope, Timer } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, LogOut, Search, Timer } from "lucide-react";
 import { api } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { Badge } from "../components/ui/badge";
@@ -138,12 +138,7 @@ export function HomeScreen() {
 
         <Card className="visit-panel min-w-0 max-w-full overflow-hidden border-slate-800 text-white lg:row-span-2 lg:self-start">
           <CardContent className="grid gap-4 p-4 sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-base font-semibold">Kunjungan Aktif</h2>
-              <div className="grid size-10 place-items-center rounded-md border border-white/15 bg-white/10 text-teal-100">
-                <Stethoscope className="size-5" />
-              </div>
-            </div>
+            <h2 className="text-base font-semibold">Kunjungan Aktif</h2>
             {activeVisit ? (
               <>
                 <div className="flex min-w-0 items-center gap-3">

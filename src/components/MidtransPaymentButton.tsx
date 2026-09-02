@@ -31,7 +31,6 @@ export function MidtransPaymentButton({
     } catch (err) {
       setError(getApiErrorMessage(err, "Pembayaran Midtrans gagal dimulai."));
     } finally {
-      // Snap callbacks trigger a refresh; only the backend determines payment status.
       try {
         await onPaymentUpdate();
       } catch (err) {

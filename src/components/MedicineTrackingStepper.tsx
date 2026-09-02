@@ -152,7 +152,7 @@ export function MedicineTrackingStepper() {
 
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,0.55fr)]">
           <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
               <div className="flex min-w-0 items-center gap-2">
                 <div className="grid size-9 shrink-0 place-items-center rounded-md bg-teal-50 text-teal-700 ring-1 ring-teal-100">
                   <ReceiptText className="size-4" />
@@ -162,7 +162,6 @@ export function MedicineTrackingStepper() {
                   <p className="truncate text-sm font-semibold text-slate-950">{medicines.length} item resep</p>
                 </div>
               </div>
-              <Badge tone={getStatusTone(order.status)}>{getStatusLabel(order.status)}</Badge>
             </div>
 
             <div className="mt-4 grid gap-2">
@@ -180,6 +179,10 @@ export function MedicineTrackingStepper() {
                   {getMedicineSummary(order)}
                 </p>
               )}
+            </div>
+
+            <div className="mt-3 flex min-w-0 justify-end">
+              <Badge tone={getStatusTone(order.status)}>{getStatusLabel(order.status)}</Badge>
             </div>
           </div>
 

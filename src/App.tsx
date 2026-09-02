@@ -1,3 +1,4 @@
+import { LayoutGroup } from "motion/react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { setAuthTokenGetter, setUnauthorizedHandler } from "./api/client";
 import { AccountScreen } from "./screens/AccountScreen";
@@ -22,18 +23,20 @@ setUnauthorizedHandler(() => {
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Navigate to="/home" replace />} />
-        <Route path="/home" element={<HomeScreen />} />
-        <Route path="/register" element={<RegisterScreen />} />
-        <Route path="/login" element={<LoginScreen />} />
-        <Route path="/check-in" element={<CheckInScreen />} />
-        <Route path="/queue" element={<QueueScreen />} />
-        <Route path="/queue/:visitId" element={<QueueStatusScreen />} />
-        <Route path="/history" element={<HistoryScreen />} />
-        <Route path="/account" element={<AccountScreen />} />
-        <Route path="*" element={<Navigate to="/home" replace />} />
-      </Routes>
+      <LayoutGroup id="patient-navigation">
+        <Routes>
+          <Route path="/" element={<Navigate to="/home" replace />} />
+          <Route path="/home" element={<HomeScreen />} />
+          <Route path="/register" element={<RegisterScreen />} />
+          <Route path="/login" element={<LoginScreen />} />
+          <Route path="/check-in" element={<CheckInScreen />} />
+          <Route path="/queue" element={<QueueScreen />} />
+          <Route path="/queue/:visitId" element={<QueueStatusScreen />} />
+          <Route path="/history" element={<HistoryScreen />} />
+          <Route path="/account" element={<AccountScreen />} />
+          <Route path="*" element={<Navigate to="/home" replace />} />
+        </Routes>
+      </LayoutGroup>
     </BrowserRouter>
   );
 }
