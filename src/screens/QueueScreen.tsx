@@ -42,6 +42,10 @@ export function QueueScreen() {
       void loadActiveQueue();
     });
 
+    socket.on("pharmacy:changed", () => {
+      void loadActiveQueue();
+    });
+
     return () => {
       socket.disconnect();
     };

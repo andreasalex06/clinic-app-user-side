@@ -51,7 +51,9 @@ export function QueueStatusCard({ visit }: QueueStatusCardProps) {
       <CardContent className="grid gap-4 p-4 sm:p-5">
         <div>
           <p className="text-xs font-medium uppercase text-white/65">Antrean Konsultasi</p>
-          <h2 className="mt-1 text-lg font-semibold">Kunjungan Aktif</h2>
+           <h2 className="mt-1 text-lg font-semibold">
+             {isConsultationCompleted ? "Kunjungan Selesai" : "Kunjungan Aktif"}
+           </h2>
         </div>
 
         <div className="flex min-w-0 items-center gap-3">

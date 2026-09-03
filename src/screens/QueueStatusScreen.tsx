@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Navigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { api, getApiErrorMessage } from "../api/client";
 import { createPatientSocket } from "../api/socket";
 import { AppShell } from "../components/AppShell";
@@ -10,6 +10,7 @@ import type { Visit } from "../types/clinic";
 
 export function QueueStatusScreen() {
   const { visitId } = useParams();
+  const navigate = useNavigate();
   const token = usePatientAuthStore((state) => state.token);
   const [visit, setVisit] = useState<Visit | null>(null);
   const [error, setError] = useState("");
@@ -22,12 +23,19 @@ export function QueueStatusScreen() {
     try {
       const response = await api.get<{ data: Visit }>(`/public/queue/${visitId}`);
 
-      setVisit(response.data.data);
+      const nextVisit = response.data.data;
+
+      if (nextVisit.status === "COMPLETED") {
+        navigate("/queue", { replace: true });
+        return;
+      }
+
+      setVisit(nextVisit);
       setError("");
     } catch (err) {
       setError(getApiErrorMessage(err, "Status antrean gagal dimuat."));
     }
-  }, [visitId]);
+  }, [navigate, visitId]);
 
   useEffect(() => {
     void loadQueueStatus();
