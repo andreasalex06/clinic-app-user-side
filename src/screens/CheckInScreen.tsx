@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
-import { CheckCircle2, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { formatSpecialization } from "../lib/doctor";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { LuCircleCheck, LuChevronLeft, LuChevronRight, LuSearch } from "react-icons/lu";
 
 import { api, getApiErrorMessage } from "../api/client";
-import { AppShell } from "../components/AppShell";
 import { Alert } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -18,6 +18,8 @@ const DOCTORS_PER_PAGE = 4;
 
 export function CheckInScreen() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedDoctorId = searchParams.get("doctorId");
 
   const token = usePatientAuthStore((state) => state.token);
   const patient = usePatientAuthStore((state) => state.patient);
@@ -43,7 +45,7 @@ export function CheckInScreen() {
         const doctorData = response.data.data;
 
         setDoctors(doctorData);
-        setDoctorId("");
+        setDoctorId(doctorData.find((doctor) => doctor.id === requestedDoctorId && doctor.isActive !== false && doctor.status !== "INACTIVE")?.id ?? "");
       } catch (err) {
         setError(
           getApiErrorMessage(err, "Data dokter gagal dimuat.")
@@ -54,7 +56,7 @@ export function CheckInScreen() {
     }
 
     loadDoctors();
-  }, []);
+  }, [requestedDoctorId]);
 
   async function handleSubmit(
     event: React.FormEvent<HTMLFormElement>
@@ -115,7 +117,7 @@ export function CheckInScreen() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="mx-auto grid w-full min-w-0 max-w-2xl gap-5">
         {/* Patient identity */}
         <Card className="min-w-0 max-w-full border border-slate-200 bg-white shadow-sm">
@@ -180,7 +182,7 @@ export function CheckInScreen() {
                 </div>
 
                 <div className="relative min-w-0">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                  <LuSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                   <Input
                     id="doctor-search"
                     className="pl-9"
@@ -223,12 +225,12 @@ export function CheckInScreen() {
                             </div>
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-semibold text-slate-950">{doctor.name}</p>
-                              <p className="truncate text-xs text-slate-500">{doctor.specialization}</p>
+                              <p className="truncate text-xs text-slate-500">{formatSpecialization(doctor.specialization)}</p>
                             </div>
                             <Badge className="shrink-0" tone={isSelected ? "slate" : "green"}>
                               {isSelected ? (
                                 <>
-                                  <CheckCircle2 className="size-3.5" />
+                                  <LuCircleCheck className="size-3.5" />
                                   Dipilih
                                 </>
                               ) : (
@@ -250,7 +252,7 @@ export function CheckInScreen() {
                           disabled={currentDoctorPage <= 1}
                           onClick={() => setDoctorPage((page) => Math.max(page - 1, 1))}
                         >
-                          <ChevronLeft className="size-4" />
+                          <LuChevronLeft className="size-4" />
                         </Button>
                         {Array.from({ length: doctorTotalPages }, (_, index) => {
                           const page = index + 1;
@@ -279,7 +281,7 @@ export function CheckInScreen() {
                           disabled={currentDoctorPage >= doctorTotalPages}
                           onClick={() => setDoctorPage((page) => Math.min(page + 1, doctorTotalPages))}
                         >
-                          <ChevronRight className="size-4" />
+                          <LuChevronRight className="size-4" />
                         </Button>
                       </div>
                     )}
@@ -338,6 +340,6 @@ export function CheckInScreen() {
           </CardContent>
         </Card>
       </div>
-    </AppShell>
+    </>
   );
 }

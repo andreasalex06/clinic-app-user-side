@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
-import { Link as RouterLink, Navigate, useNavigate } from "react-router-dom";
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, LogOut, Search, Timer } from "lucide-react";
-import { api } from "../api/client";
-import { AppShell } from "../components/AppShell";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { formatSpecialization } from "../lib/doctor";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { LuChevronLeft, LuChevronRight, LuSearch, LuStethoscope } from "react-icons/lu";
+import { usePatientSocket } from "../components/PatientSocketProvider";
+import { Alert } from "../components/ui/alert";
+import { api, getApiErrorMessage } from "../api/client";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
-import { formatQueueCode } from "../lib/queue";
+import { MedicineTrackingStepper } from "../components/MedicineTrackingStepper";
+import { PatientHero } from "../components/PatientHero";
 import { usePatientAuthStore } from "../stores/patientAuthStore";
 import type { Doctor, Visit } from "../types/clinic";
 
@@ -15,6 +18,10 @@ const DOCTORS_PER_PAGE = 4;
 
 function getInitial(name?: string) {
   return name?.charAt(0).toUpperCase() ?? "P";
+}
+
+function getDisplayDoctorName(name: string) {
+  return name.replace(/\s+Sp\..*$/i, "").trim();
 }
 
 function getDoctorAvatarUrl(doctor?: Doctor) {
@@ -33,38 +40,20 @@ function isDoctorActive(doctor: Doctor) {
   return true;
 }
 
-function formatVisitDate(visit: Visit) {
-  const value = visit.checkInTime ?? visit.queueDate;
-
-  if (!value) {
-    return "-";
-  }
-
-  return new Date(value).toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric"
-  });
-}
-
-function formatVisitTime(visit: Visit) {
-  const value = visit.checkInTime ?? visit.queueDate;
-
-  if (!value) {
-    return "-";
-  }
-
-  return new Date(value).toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit"
-  });
-}
-
 export function HomeScreen() {
+  const location = useLocation();
   const navigate = useNavigate();
+  const socket = usePatientSocket();
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const submissionRef = useRef(false);
+  const handledAssistantState = useRef<string | null>(null);
+  const requestVersion = useRef(0);
+  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [consultError, setConsultError] = useState("");
+  const [queueError, setQueueError] = useState("");
+  const [queueLoading, setQueueLoading] = useState(true);
   const token = usePatientAuthStore((state) => state.token);
-  const patient = usePatientAuthStore((state) => state.patient);
-  const logout = usePatientAuthStore((state) => state.logout);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [activeVisit, setActiveVisit] = useState<Visit | null>(null);
   const [searchInput, setSearchInput] = useState("");
@@ -79,10 +68,84 @@ export function HomeScreen() {
     void api.get<{ data: Doctor[] }>("/public/doctors")
       .then((response) => setDoctors(response.data.data))
       .catch(() => setDoctors([]));
-    void api.get<{ data: Visit | null }>("/public/queue/active")
-      .then((response) => setActiveVisit(response.data.data))
-      .catch(() => setActiveVisit(null));
+
   }, [token]);
+
+  const refreshQueue = useCallback(async () => {
+    const version = ++requestVersion.current;
+    try {
+      const response = await api.get<{ data: Visit | null }>("/public/queue/active");
+      if (version !== requestVersion.current) return;
+      setActiveVisit((current) => response.data.data ?? (current?.status === "CANCELLED" ? current : null));
+      setQueueError("");
+    } catch (error) {
+      if (version === requestVersion.current) setQueueError(getApiErrorMessage(error, "Antrean gagal dimuat."));
+    } finally {
+      if (version === requestVersion.current) setQueueLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    void refreshQueue();
+    return () => { requestVersion.current++; };
+  }, [token, refreshQueue]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const refresh = () => { void refreshQueue(); };
+    function changed(payload: { visitId: string; status?: Visit["status"] }) {
+      if (payload.status === "CANCELLED" && activeVisit?.id === payload.visitId) {
+        requestVersion.current++;
+        setQueueLoading(false);
+        setActiveVisit((current) => current?.id === payload.visitId ? { ...current, status: "CANCELLED", waitingAhead: 0 } : current);
+      } else refresh();
+    }
+    socket.on("queue:changed", changed);
+    socket.on("connect", refresh);
+    return () => {
+      socket.off("queue:changed", changed);
+      socket.off("connect", refresh);
+    };
+  }, [socket, refreshQueue, activeVisit?.id]);
+
+  function openConsultation(doctor: Doctor) {
+    setSelectedDoctor(doctor);
+    setConsultError("");
+    dialogRef.current?.showModal();
+  }
+
+  useEffect(() => {
+    const state = location.state as { assistantDoctorId?: unknown } | null;
+    if (typeof state?.assistantDoctorId !== "string" || doctors.length === 0) return;
+    if (handledAssistantState.current === location.key) return;
+    const doctor = doctors.find((item) => item.id === state.assistantDoctorId && isDoctorActive(item));
+    if (!doctor) return;
+    handledAssistantState.current = location.key;
+    window.setTimeout(() => openConsultation(doctor), 0);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [doctors, location.key, location.pathname, location.state, navigate]);
+
+  async function confirmConsultation() {
+    if (!selectedDoctor || submissionRef.current) return;
+    submissionRef.current = true;
+    setSubmitting(true);
+    setConsultError("");
+    try {
+      const response = await api.post<{ data: Visit }>("/public/check-in", { doctorId: selectedDoctor.id });
+      requestVersion.current++;
+      setActiveVisit(response.data.data);
+      setQueueLoading(false);
+      setQueueError("");
+      dialogRef.current?.close();
+      document.getElementById("patient-queue")?.scrollIntoView({ block: "nearest" });
+    } catch (error) {
+      setConsultError(getApiErrorMessage(error, "Antrean gagal dibuat. Silakan coba lagi."));
+    } finally {
+      submissionRef.current = false;
+      setSubmitting(false);
+    }
+  }
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
@@ -109,99 +172,31 @@ export function HomeScreen() {
   );
   const isSearching = searchInput.trim() !== debouncedSearch;
 
-  function handleLogout() {
-    logout();
-    navigate("/login", { replace: true });
-  }
 
   return (
-    <AppShell>
-      <section className="grid w-full max-w-full gap-4 overflow-hidden md:pt-1 lg:grid-cols-[minmax(0,1fr)_minmax(21rem,0.72fr)] lg:items-start lg:gap-5 lg:overflow-visible lg:pt-2 xl:grid-cols-[minmax(0,1fr)_minmax(23rem,0.68fr)]">
-        <div className="grid min-w-0 max-w-full gap-4 lg:pt-1">
-          <Card className="min-w-0 max-w-full border-slate-200 bg-white shadow-sm">
-            <CardContent className="flex min-w-0 items-center justify-between gap-3 p-4 sm:p-5">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="grid size-11 shrink-0 place-items-center rounded-lg bg-slate-950 text-base font-semibold text-white">
-                  {getInitial(patient?.name)}
-                </div>
-                <div className="min-w-0">
-                  <h1 className="truncate text-lg font-semibold text-slate-950">Halo, {patient?.name ?? "Pasien"}</h1>
-                  <p className="text-sm text-slate-500">Selamat datang kembali</p>
-                </div>
-              </div>
-              <Button size="icon" variant="outline" aria-label="Keluar akun" onClick={handleLogout}>
-                <LogOut className="size-5" />
-              </Button>
-            </CardContent>
-          </Card>
+    <>
+      <div className="grid w-full min-w-0 gap-3">
+        <div className="hero-bleed">
+          <PatientHero />
+        </div>
+        <section className="grid min-w-0 gap-3 overflow-hidden md:grid-cols-[minmax(0,1fr)_minmax(19rem,0.72fr)] md:items-start md:overflow-visible xl:grid-cols-[minmax(0,1fr)_minmax(23rem,0.68fr)]">
+        <div id="patient-queue" className="order-1 grid min-w-0 gap-3 md:col-start-2 md:row-start-1">
+          {queueError && <Alert tone="error">{queueError}<button className="ml-2 underline" onClick={() => void refreshQueue()}>Coba lagi</button></Alert>}
+          {queueLoading ? <p role="status" className="p-4 text-sm text-slate-500">Memuat antrean...</p> : <MedicineTrackingStepper visit={activeVisit} />}
         </div>
 
-        <Card className="visit-panel min-w-0 max-w-full overflow-hidden border-slate-800 text-white lg:row-span-2 lg:self-start">
-          <CardContent className="grid gap-4 p-4 sm:p-5">
-            <h2 className="text-base font-semibold">Kunjungan Aktif</h2>
-            {activeVisit ? (
-              <>
-                <div className="flex min-w-0 items-center gap-3">
-                  {getDoctorAvatarUrl(activeVisit.doctor) ? (
-                    <img
-                      className="size-12 shrink-0 rounded-lg bg-white object-cover"
-                      src={getDoctorAvatarUrl(activeVisit.doctor)}
-                      alt=""
-                    />
-                  ) : (
-                    <div className="grid size-12 shrink-0 place-items-center rounded-lg bg-white text-base font-semibold text-slate-950">
-                      {getInitial(activeVisit.doctor.name)}
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <h3 className="truncate text-lg font-semibold">{activeVisit.doctor.name}</h3>
-                    <p className="truncate text-sm text-white/75">{activeVisit.doctor.specialization}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] gap-2">
-                  <div className="flex min-w-0 gap-2 rounded-lg border border-white/15 bg-white/10 p-3">
-                    <CalendarDays className="size-5 shrink-0 text-teal-200" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-white/65">Tanggal</p>
-                      <p className="break-words text-sm font-semibold">{formatVisitDate(activeVisit)}</p>
-                    </div>
-                  </div>
-                  <div className="flex min-w-0 gap-2 rounded-lg border border-white/15 bg-white/10 p-3">
-                    <Timer className="size-5 shrink-0 text-teal-200" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-white/65">Jam</p>
-                      <p className="break-words text-sm font-semibold">{formatVisitTime(activeVisit)}</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="grid justify-items-center rounded-lg border border-white/10 bg-white p-4 text-center shadow-sm">
-                  <p className="text-xs font-medium text-slate-500">Nomor Antrean</p>
-                  <p className="mt-1 text-5xl font-semibold leading-none text-teal-700">{formatQueueCode(activeVisit.queueNumber)}</p>
-                </div>
-              </>
-            ) : (
-              <div className="grid gap-4">
-                <div>
-                  <h3 className="text-lg font-semibold">Belum ada antrean aktif</h3>
-                  <p className="mt-1 text-sm leading-6 text-white/75">Daftar konsultasi untuk mengambil nomor antrean hari ini.</p>
-                </div>
-                <RouterLink to="/check-in" className="inline-flex h-11 items-center justify-center rounded-md bg-white px-4 text-sm font-medium text-slate-950 shadow-sm transition hover:bg-slate-100">
-                  Daftar Konsultasi
-                </RouterLink>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="w-full max-w-full overflow-hidden border-slate-200 bg-white shadow-sm lg:col-start-1 lg:row-start-2 lg:mt-0">
-          <CardContent className="grid gap-3 p-4 sm:p-5">
+        <section id="available-doctors" className="order-2 min-w-0 scroll-mt-6 md:col-start-1 md:row-start-1">
+          <Card className="min-w-0 border-slate-200 bg-white shadow-sm">
+            <CardContent className="grid min-w-0 gap-3 p-4 sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-base font-semibold text-slate-950">Dokter Tersedia</h2>
               <Badge>{shownDoctors.length} dokter</Badge>
             </div>
             <div className="relative min-w-0 max-w-full">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-teal-700" />
+              <LuSearch className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-teal-700" />
               <Input
+                id="doctor-search"
+                aria-label="Cari dokter atau layanan"
                 className="pl-10"
                 placeholder="Cari dokter atau layanan..."
                 value={searchInput}
@@ -209,31 +204,36 @@ export function HomeScreen() {
               />
             </div>
             {isSearching && (
-              <p className="text-xs font-medium text-slate-500">Mencari setelah 1 detik...</p>
+              <p className="text-xs font-medium text-slate-500">Mencari dokter...</p>
             )}
-            <div className="grid min-w-0 max-w-full gap-3 md:grid-cols-2">
+            <div className="grid min-w-0 max-w-full gap-3">
               {paginatedDoctors.map((doctor) => (
-                <Card key={doctor.id} className="min-h-[5rem] min-w-0 max-w-full border-slate-200 bg-white shadow-sm">
-                  <CardContent className="flex min-h-[5rem] min-w-0 items-center gap-3 p-3 sm:p-4">
+                <Card key={doctor.id} className="min-w-0 overflow-hidden border-teal-100 bg-teal-50 shadow-sm">
+                  <CardContent className="grid min-w-0 grid-cols-[3.75rem_minmax(0,1fr)_auto] items-center gap-2.5 p-2.5 sm:grid-cols-[4rem_minmax(0,1fr)_auto] sm:gap-3 sm:p-3">
                     {getDoctorAvatarUrl(doctor) ? (
                       <img
-                        className="size-11 shrink-0 rounded-lg bg-teal-50 object-cover"
+                        className="aspect-square w-full rounded-lg bg-teal-50 object-cover object-top"
                         src={getDoctorAvatarUrl(doctor)}
                         alt=""
                       />
                     ) : (
-                      <div className="grid size-11 shrink-0 place-items-center rounded-lg bg-slate-100 font-semibold text-slate-700">
+                      <div className="grid aspect-square w-full place-items-center rounded-lg bg-slate-100 text-lg font-semibold text-slate-700">
                         {getInitial(doctor.name)}
                       </div>
                     )}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-slate-950">{doctor.name}</p>
-                      <p className="truncate text-xs text-slate-500">{doctor.specialization}</p>
+                    <div className="min-w-0">
+                      <p className="break-words text-[0.78rem] font-semibold leading-4 text-slate-950">{getDisplayDoctorName(doctor.name)}</p>
+                      <p className="mt-0.5 break-words text-[0.68rem] leading-3.5 text-slate-500">{formatSpecialization(doctor.specialization)}</p>
+                      <p className="mt-0.5 break-words text-[0.68rem] font-medium leading-3.5 text-teal-800">
+                        {doctor.consultationFee != null
+                          ? `Konsultasi ${new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(doctor.consultationFee)}`
+                          : "Tarif belum tersedia"}
+                      </p>
                     </div>
-                    <Badge tone="green">
-                      <CheckCircle2 className="size-3.5" />
-                      Aktif
-                    </Badge>
+                    <Button className="h-8 shrink-0 gap-1 border border-teal-200 bg-white px-2.5 text-xs text-teal-800 hover:bg-teal-100" onClick={() => openConsultation(doctor)}>
+                      <LuStethoscope aria-hidden="true" className="size-3.5" />
+                      Konsul
+                    </Button>
                   </CardContent>
                 </Card>
               ))}
@@ -248,7 +248,7 @@ export function HomeScreen() {
                   disabled={currentDoctorPage <= 1}
                   onClick={() => setDoctorPage((page) => Math.max(page - 1, 1))}
                 >
-                  <ChevronLeft className="size-4" />
+                  <LuChevronLeft className="size-4" />
                 </Button>
                 {Array.from({ length: doctorTotalPages }, (_, index) => {
                   const page = index + 1;
@@ -277,7 +277,7 @@ export function HomeScreen() {
                   disabled={currentDoctorPage >= doctorTotalPages}
                   onClick={() => setDoctorPage((page) => Math.min(page + 1, doctorTotalPages))}
                 >
-                  <ChevronRight className="size-4" />
+                  <LuChevronRight className="size-4" />
                 </Button>
               </div>
             )}
@@ -290,9 +290,20 @@ export function HomeScreen() {
                 </CardContent>
               </Card>
             )}
-          </CardContent>
-        </Card>
-      </section>
-    </AppShell>
+            </CardContent>
+          </Card>
+        </section>
+        </section>
+      </div>
+      <dialog ref={dialogRef} aria-labelledby="consult-title" onCancel={(event) => { if (submitting) event.preventDefault(); }} className="fixed inset-0 m-auto w-[calc(100%_-_2rem)] max-w-md rounded-lg border border-slate-200 bg-white p-5 text-slate-950 shadow-xl backdrop:bg-black/40">
+        <h2 id="consult-title" className="text-lg font-semibold">Konfirmasi Konsultasi</h2>
+        <p className="mt-3 text-sm leading-6 text-slate-600">Apakah Anda ingin konsul dengan <strong className="font-semibold text-slate-950">{selectedDoctor?.name}</strong> ({formatSpecialization(selectedDoctor?.specialization)}) dan mengambil antrean hari ini?</p>
+        {consultError && <Alert tone="error" className="mt-3">{consultError}</Alert>}
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <Button autoFocus variant="outline" disabled={submitting} onClick={() => dialogRef.current?.close()}>Batal</Button>
+          <Button className="bg-teal-700 hover:bg-teal-800" disabled={submitting} onClick={() => void confirmConsultation()}>{submitting ? "Mengambil antrean..." : "Ya, Ambil Antrean"}</Button>
+        </div>
+      </dialog>
+    </>
   );
 }

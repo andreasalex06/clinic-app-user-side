@@ -1,7 +1,6 @@
-import { Navigate, useNavigate } from "react-router-dom";
-import { CalendarDays, LogOut, MapPin, Phone, UserRound } from "lucide-react";
-import { AppShell } from "../components/AppShell";
-import { Button } from "../components/ui/button";
+import { LogoutButton } from "../components/LogoutButton";
+import { Navigate } from "react-router-dom";
+import { LuCalendarDays, LuMapPin, LuPhone, LuUserRound } from "react-icons/lu";
 import { Card, CardContent } from "../components/ui/card";
 import { genderOptions } from "../constants/clinic";
 import { usePatientAuthStore } from "../stores/patientAuthStore";
@@ -19,35 +18,29 @@ function formatBirthDate(value?: string) {
 }
 
 export function AccountScreen() {
-  const navigate = useNavigate();
   const token = usePatientAuthStore((state) => state.token);
   const patient = usePatientAuthStore((state) => state.patient);
-  const logout = usePatientAuthStore((state) => state.logout);
 
   if (!token) {
     return <Navigate to="/login" replace />;
   }
 
-  function handleLogout() {
-    logout();
-    navigate("/login", { replace: true });
-  }
 
   const patientInitial = patient?.name?.trim().charAt(0).toUpperCase() ?? "P";
   const genderLabel =
     genderOptions.find((option) => option.value === patient?.gender)?.label ?? "-";
   const profileItems = [
-    { label: "Nomor WhatsApp", value: patient?.phone ?? "-", icon: Phone },
-    { label: "Jenis Kelamin", value: genderLabel, icon: UserRound },
-    { label: "Tanggal Lahir", value: formatBirthDate(patient?.birthDate), icon: CalendarDays },
-    { label: "Alamat", value: patient?.address ?? "-", icon: MapPin }
+    { label: "Nomor WhatsApp", value: patient?.phone ?? "-", icon: LuPhone },
+    { label: "Jenis Kelamin", value: genderLabel, icon: LuUserRound },
+    { label: "Tanggal Lahir", value: formatBirthDate(patient?.birthDate), icon: LuCalendarDays },
+    { label: "Alamat", value: patient?.address ?? "-", icon: LuMapPin }
   ];
 
   return (
-    <AppShell>
+    <>
       <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
         <CardContent className="p-0">
-          <div className="bg-slate-950 px-5 py-6 text-white">
+          <div className="m-3 rounded-lg bg-teal-700 px-5 py-6 text-white sm:m-4">
             <div className="flex min-w-0 items-center gap-4">
               <div className="grid size-14 shrink-0 place-items-center rounded-lg bg-white/10 text-xl font-semibold ring-1 ring-white/15">
                 {patientInitial}
@@ -85,14 +78,11 @@ export function AccountScreen() {
             </div>
 
             <div className="border-t border-slate-100 pt-4">
-              <Button className="w-full justify-center sm:w-auto" variant="destructive" type="button" onClick={handleLogout}>
-                <LogOut className="size-4" />
-                Keluar Akun
-              </Button>
+              <LogoutButton />
             </div>
           </div>
         </CardContent>
       </Card>
-    </AppShell>
+    </>
   );
 }

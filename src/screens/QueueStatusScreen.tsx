@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { api, getApiErrorMessage } from "../api/client";
 import { createPatientSocket } from "../api/socket";
-import { AppShell } from "../components/AppShell";
 import { QueueStatusCard } from "../components/QueueStatusCard";
 import { Alert } from "../components/ui/alert";
 import { usePatientAuthStore } from "../stores/patientAuthStore";
@@ -60,13 +59,13 @@ export function QueueStatusScreen() {
   }
 
   return (
-    <AppShell>
+    <>
       {error && <Alert tone="error">{error}</Alert>}
       {visit ? (
         <QueueStatusCard visit={visit} />
       ) : (
         <p className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-sm">Memuat status antrean...</p>
       )}
-    </AppShell>
+    </>
   );
 }

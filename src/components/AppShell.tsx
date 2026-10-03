@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { useLocation } from "react-router-dom";
+import { AnimatePresence } from "motion/react";
 import { usePatientAuthStore } from "../stores/patientAuthStore";
 import { PatientNav } from "./PatientNav";
+import { PatientFooter } from "./PatientFooter";
 import { ContentMotion } from "./ui/Motion";
 
 type AppShellProps = {
@@ -11,20 +13,22 @@ type AppShellProps = {
 export function AppShell({ children }: AppShellProps) {
   const location = useLocation();
   const token = usePatientAuthStore((state) => state.token);
+  const patient = usePatientAuthStore((state) => state.patient);
   const showNav = Boolean(token) && !["/login", "/register"].includes(location.pathname);
 
   return (
-    <main className="app-shell">
-      <div className="app-container">
-        <div className={showNav ? "grid gap-5 md:gap-6" : "mx-auto grid min-h-[calc(100svh-2rem)] w-full max-w-md content-center gap-4"}>
-          {showNav && <PatientNav />}
-          <section className="min-w-0">
+    <div className="app-shell flex flex-col">
+      {showNav && <PatientNav patientName={patient?.name} />}
+      <div className="app-container flex flex-1 flex-col">
+        <main className={showNav || location.pathname === "/faq" ? "min-w-0 flex-1" : "mx-auto grid w-full max-w-md flex-1 content-center py-8"}>
+          <AnimatePresence mode="wait" initial={false}>
             <ContentMotion key={location.pathname} className="content-grid">
               {children}
             </ContentMotion>
-          </section>
-        </div>
+          </AnimatePresence>
+        </main>
       </div>
-    </main>
+      <PatientFooter />
+    </div>
   );
 }

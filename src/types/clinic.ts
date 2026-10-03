@@ -17,8 +17,10 @@ export type Patient = {
 
 export type Doctor = {
   id: string;
+  queueIndex: number;
   name: string;
   specialization: string;
+  consultationFee?: number | null;
   phone: string;
   isActive?: boolean;
   status?: "ACTIVE" | "INACTIVE";
@@ -33,14 +35,31 @@ export type Visit = {
   checkInTime?: string;
   status: VisitStatus;
   waitingAhead?: number;
+  estimatedConsultationAt?: string | null;
+  estimatedWaitingMinutes?: number;
+  averageConsultationMinutes?: number;
   patient: Patient;
   doctor: Doctor;
+  consultation?: {
+    complaint: string;
+    notes?: string | null;
+    diagnosis: { name: string; code: string };
+    treatments: Array<{ id: string; treatment: { name: string } }>;
+    medicines: Array<{
+      id: string;
+      quantity: number;
+      instructions?: string | null;
+      medicine: { name: string };
+    }>;
+  } | null;
   invoice?: {
     id: string;
     invoiceNo: string;
     status: InvoiceStatus;
     total: number;
     paidAt?: string | null;
+    midtransPaymentType?: string | null;
+    items?: Array<{ id: string; item: string; quantity: number; price: number; amount: number }>;
   } | null;
   pharmacyOrder?: PharmacyOrder | null;
 };
@@ -59,6 +78,7 @@ export type PharmacyOrder = {
       medicines: Array<{
         id: string;
         quantity: number;
+        instructions?: string | null;
         medicine: {
           id: string;
           name: string;

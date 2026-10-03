@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { api, getApiErrorMessage } from "../api/client";
-import { AppShell } from "../components/AppShell";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
-import { Card, CardContent } from "../components/ui/card";
+import { Card, CardContent, CardHeader } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { usePatientAuthStore } from "../stores/patientAuthStore";
@@ -34,16 +33,23 @@ export function LoginScreen() {
   }
 
   return (
-    <AppShell>
-      <div className="grid gap-4 text-center">
-        <div>
+    <>
+      <div className="grid gap-5">
+        <header className="text-center">
+          <div className="mx-auto grid size-14 place-items-center rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-200">
+            <img src="/logo.png" alt="" width={48} height={48} className="size-full object-contain" />
+          </div>
+          <p className="mt-3 text-sm font-semibold text-teal-800">Sarana Medika</p>
           <h1 className="mt-1 text-2xl font-semibold text-slate-950">Masuk Pasien</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-500">Gunakan nomor WhatsApp dan password yang sudah didaftarkan.</p>
-        </div>
-      </div>
-      <Card className="border-slate-200 bg-white shadow-sm">
-        <CardContent className="pt-4 sm:pt-5">
-          <form className="grid gap-4" onSubmit={handleSubmit}>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Masuk dengan nomor WhatsApp dan password Anda.</p>
+        </header>
+        <Card className="border-slate-200 bg-white shadow-sm">
+          <CardHeader className="pb-0">
+            <h2 className="text-base font-semibold text-slate-950">Informasi akun</h2>
+            <p className="text-sm leading-5 text-slate-600">Gunakan data yang terhubung dengan akun pasien.</p>
+          </CardHeader>
+          <CardContent>
+            <form className="grid gap-4" onSubmit={handleSubmit}>
             {error && <Alert tone="error">{error}</Alert>}
             <div className="grid gap-2">
               <Label htmlFor="phone">Nomor WhatsApp</Label>
@@ -64,15 +70,16 @@ export function LoginScreen() {
                 required
               />
             </div>
-            <Button type="submit" disabled={loading}>
+            <Button className="mt-1 w-full bg-teal-700 hover:bg-teal-800 focus-visible:ring-teal-600" type="submit" disabled={loading}>
               {loading ? "Memproses..." : "Masuk"}
             </Button>
-          </form>
-        </CardContent>
-      </Card>
-      <p className="text-center text-sm text-slate-500">
-        Belum punya akun? <RouterLink className="font-semibold text-slate-950 underline-offset-4 hover:underline" to="/register">Registrasi</RouterLink>
-      </p>
-    </AppShell>
+            </form>
+          </CardContent>
+        </Card>
+        <p className="text-center text-sm text-slate-600">
+          Belum punya akun? <RouterLink className="font-semibold text-teal-800 underline-offset-4 hover:underline" to="/register">Registrasi</RouterLink>
+        </p>
+      </div>
+    </>
   );
 }

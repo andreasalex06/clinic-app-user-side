@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { api, getApiErrorMessage } from "../api/client";
-import { AppShell } from "../components/AppShell";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
-import { Card, CardContent } from "../components/ui/card";
+import { Card, CardContent, CardHeader } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Select } from "../components/ui/select";
@@ -48,16 +47,23 @@ export function RegisterScreen() {
   }
 
   return (
-    <AppShell>
-      <div className="grid gap-3 text-center">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-950">Registrasi Pasien</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-500">Isi data pasien untuk membuat akun dan lanjutkan check-in.</p>
-        </div>
-      </div>
-      <Card className="border-slate-200 bg-white shadow-sm">
-        <CardContent className="pt-4 sm:pt-5">
-          <form className="grid gap-4" onSubmit={handleSubmit}>
+    <>
+      <div className="grid gap-5">
+        <header className="text-center">
+          <div className="mx-auto grid size-14 place-items-center rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-200">
+            <img src="/logo.png" alt="" width={48} height={48} className="size-full object-contain" />
+          </div>
+          <p className="mt-3 text-sm font-semibold text-teal-800">Sarana Medika</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">Buat Akun Pasien</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Lengkapi data berikut untuk mendaftar dan lanjut check-in.</p>
+        </header>
+        <Card className="border-slate-200 bg-white shadow-sm">
+          <CardHeader className="pb-0">
+            <h2 className="text-base font-semibold text-slate-950">Data pasien</h2>
+            <p className="text-sm leading-5 text-slate-600">Isi sesuai identitas dan kontak yang bisa dihubungi.</p>
+          </CardHeader>
+          <CardContent>
+            <form className="grid gap-4" onSubmit={handleSubmit}>
             {error && <Alert tone="error">{error}</Alert>}
             <div className="grid gap-2">
               <Label htmlFor="name">Nama lengkap</Label>
@@ -89,15 +95,16 @@ export function RegisterScreen() {
               <Label htmlFor="address">Alamat</Label>
               <Textarea id="address" value={form.address} onChange={(event) => updateField("address", event.target.value)} required />
             </div>
-            <Button type="submit" disabled={loading}>
+            <Button className="mt-1 w-full bg-teal-700 hover:bg-teal-800 focus-visible:ring-teal-600" type="submit" disabled={loading}>
               {loading ? "Mendaftarkan..." : "Daftar & Lanjut Check-in"}
             </Button>
-          </form>
-        </CardContent>
-      </Card>
-      <p className="text-center text-sm text-slate-500">
-        Sudah punya akun? <RouterLink className="font-semibold text-slate-950 underline-offset-4 hover:underline" to="/login">Masuk</RouterLink>
-      </p>
-    </AppShell>
+            </form>
+          </CardContent>
+        </Card>
+        <p className="text-center text-sm text-slate-600">
+          Sudah punya akun? <RouterLink className="font-semibold text-teal-800 underline-offset-4 hover:underline" to="/login">Masuk</RouterLink>
+        </p>
+      </div>
+    </>
   );
 }

@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Circle, CreditCard, PackageCheck, Pill, ReceiptText, Ticket } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { LuCircleCheck, LuCreditCard, LuPackageCheck, LuPill } from "react-icons/lu";
 import { api, getApiErrorMessage } from "../api/client";
-import { createPatientSocket } from "../api/socket";
+import { usePatientSocket } from "./PatientSocketProvider";
 import { MidtransPaymentButton } from "./MidtransPaymentButton";
+import { PreparationEstimate } from "./PreparationEstimate";
+import { VisitDetailsModal } from "./VisitDetailsModal";
 import { Alert } from "./ui/alert";
-import { Badge } from "./ui/badge";
+import { QueueStatusCard } from "./QueueStatusCard";
 import { Card, CardContent } from "./ui/card";
 import { formatQueueCode } from "../lib/queue";
-import { usePatientAuthStore } from "../stores/patientAuthStore";
-import type { PharmacyOrder, PharmacyStatus } from "../types/clinic";
+import type { PharmacyOrder, PharmacyStatus, Visit } from "../types/clinic";
 
 const trackingSteps: Array<{
   status: PharmacyStatus;
@@ -45,81 +46,115 @@ const statusIndex: Record<PharmacyStatus, number> = {
 };
 
 function getStepIcon(status: PharmacyStatus) {
-  if (status === "WAITING_PAYMENT") return CreditCard;
-  if (status === "PREPARING") return Pill;
-  return PackageCheck;
+  if (status === "WAITING_PAYMENT") return LuCreditCard;
+  if (status === "PREPARING") return LuPill;
+  return LuPackageCheck;
 }
 
-function getMedicineSummary(order: PharmacyOrder) {
-  const medicines = order.visit.consultation?.medicines ?? [];
+function isBeforeToday(value?: string | null) {
+  if (!value) return false;
 
-  if (medicines.length === 0) {
-    return "Resep obat sedang diproses.";
-  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
 
-  return medicines.map((item) => `${item.medicine.name} x${item.quantity}`).join(", ");
+  const today = new Date();
+  return date.getFullYear() < today.getFullYear()
+    || (date.getFullYear() === today.getFullYear() && date.getMonth() < today.getMonth())
+    || (date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() < today.getDate());
 }
 
-function getStatusTone(status: PharmacyStatus) {
-  if (status === "WAITING_PAYMENT") return "amber";
-  if (status === "READY_FOR_PICKUP" || status === "COMPLETED") return "green";
-  return "default";
-}
-
-function getStatusLabel(status: PharmacyStatus) {
-  return trackingSteps[statusIndex[status]]?.label ?? status;
-}
-
-export function MedicineTrackingStepper() {
-  const token = usePatientAuthStore((state) => state.token);
+export function MedicineTrackingStepper({ visit }: { visit?: Visit | null }) {
+  const socket = usePatientSocket();
+  const [showDetails, setShowDetails] = useState(false);
   const [order, setOrder] = useState<PharmacyOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const requestVersion = useRef(0);
+  const completedOrderIdRef = useRef<string | null>(null);
+  const dismissedExpiredOrderIdRef = useRef<string | null>(null);
+  const hasLoadedTrackingRef = useRef(false);
 
   const loadTracking = useCallback(async () => {
+    const version = ++requestVersion.current;
     try {
       const response = await api.get<{ data: PharmacyOrder | null }>("/public/pharmacy/active");
+      if (version !== requestVersion.current) return;
+      const nextOrder = response.data.data;
 
-      setOrder(response.data.data);
+      if (nextOrder && nextOrder.id === dismissedExpiredOrderIdRef.current) {
+        dismissedExpiredOrderIdRef.current = nextOrder.id;
+        setOrder(null);
+        setError("");
+        return;
+      }
+
+      if (nextOrder?.id !== dismissedExpiredOrderIdRef.current) {
+        dismissedExpiredOrderIdRef.current = null;
+      }
+
+      const nextOrderDate = nextOrder?.visit.queueDate ?? nextOrder?.queueDate ?? nextOrder?.visit.checkInTime;
+      if (nextOrder && !hasLoadedTrackingRef.current && isBeforeToday(nextOrderDate)) {
+        dismissedExpiredOrderIdRef.current = nextOrder.id;
+        setOrder(null);
+        setError("");
+        hasLoadedTrackingRef.current = true;
+        return;
+      }
+
+      hasLoadedTrackingRef.current = true;
+
+      if (
+        !completedOrderIdRef.current ||
+        (nextOrder && nextOrder.id !== completedOrderIdRef.current)
+      ) {
+        completedOrderIdRef.current = null;
+        setOrder(nextOrder);
+      }
       setError("");
     } catch (err) {
+      if (version !== requestVersion.current) return;
       setError(getApiErrorMessage(err, "Tracking obat gagal dimuat."));
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
   }, []);
 
+  useEffect(() => { void loadTracking(); return () => { requestVersion.current++; }; }, [loadTracking]);
+
   useEffect(() => {
-    let isMounted = true;
+    let currentDay = new Date().toDateString();
+    const timerId = window.setInterval(() => {
+      const nextDay = new Date().toDateString();
+      if (nextDay === currentDay) return;
 
-    function loadIfMounted() {
-      if (isMounted) {
-        void loadTracking();
-      }
-    }
+      currentDay = nextDay;
+      dismissedExpiredOrderIdRef.current = null;
+      void loadTracking();
+    }, 60_000);
 
-    loadIfMounted();
-    const intervalId = window.setInterval(loadIfMounted, 5000);
-
-    return () => {
-      isMounted = false;
-      window.clearInterval(intervalId);
-    };
+    return () => window.clearInterval(timerId);
   }, [loadTracking]);
 
   useEffect(() => {
-    if (!token) return;
-
-    const socket = createPatientSocket(token);
-
-    socket.on("pharmacy:changed", () => {
-      void loadTracking();
-    });
-
+    if (!socket) return;
+    function onChange(payload: { orderId: string; status: PharmacyStatus }) {
+      if (payload.status === "COMPLETED") {
+        requestVersion.current++;
+        setLoading(false);
+        completedOrderIdRef.current = payload.orderId;
+        setOrder((current) => current?.id === payload.orderId ? { ...current, status: "COMPLETED" } : current);
+      } else {
+        void loadTracking();
+      }
+    }
+    const refresh = () => { void loadTracking(); };
+    socket.on("pharmacy:changed", onChange);
+    socket.on("connect", refresh);
     return () => {
-      socket.disconnect();
+      socket.off("pharmacy:changed", onChange);
+      socket.off("connect", refresh);
     };
-  }, [loadTracking, token]);
+  }, [socket, loadTracking]);
 
   if (loading) {
     return (
@@ -132,112 +167,133 @@ export function MedicineTrackingStepper() {
   }
 
   if (error) {
-    return <Alert tone="error">{error}</Alert>;
+    return <>{visit && <QueueStatusCard visit={visit} />}<Alert tone="error">{error}</Alert></>;
   }
 
   if (!order) {
-    return null;
+    if (visit) return <QueueStatusCard visit={visit} />;
+
+    return (
+      <Card className="min-w-0 border-slate-200 bg-white shadow-sm">
+        <CardContent className="grid gap-3 p-4 sm:p-5">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500">Antrean Konsultasi</p>
+            <h2 className="mt-1 text-base font-semibold text-slate-950">Belum ada antrean aktif</h2>
+          </div>
+          <button
+            type="button"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-md border border-teal-200 bg-teal-50 px-4 text-sm font-medium text-teal-800 transition hover:bg-teal-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-700"
+            onClick={() => {
+              document.getElementById("available-doctors")?.scrollIntoView({ block: "start" });
+              document.getElementById("doctor-search")?.focus({ preventScroll: true });
+            }}
+          >
+            Pilih Dokter
+          </button>
+        </CardContent>
+      </Card>
+    );
   }
 
   const activeStep = statusIndex[order.status];
+  const orderDate = order.visit.queueDate ?? order.queueDate ?? order.visit.checkInTime;
+  const isOrderExpired = isBeforeToday(orderDate);
   const medicines = order.visit.consultation?.medicines ?? [];
 
-  return (
-    <Card className="border-slate-200 bg-white shadow-sm">
-      <CardContent className="grid gap-5 p-4 sm:p-5">
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-slate-950">Farmasi</h2>
-          <p className="shrink-0 text-right text-xs font-medium uppercase text-teal-700">Live Tracking</p>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,0.55fr)]">
-          <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <div className="grid size-9 shrink-0 place-items-center rounded-md bg-teal-50 text-teal-700 ring-1 ring-teal-100">
-                  <ReceiptText className="size-4" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium uppercase text-slate-500">Daftar Obat</p>
-                  <p className="truncate text-sm font-semibold text-slate-950">{medicines.length} item resep</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-2">
-              {medicines.length > 0 ? (
-                medicines.map((item) => (
-                  <div key={item.id} className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-slate-100 bg-slate-50/70 px-3 py-2">
-                    <p className="min-w-0 truncate text-sm font-semibold text-slate-800">{item.medicine.name}</p>
-                    <span className="shrink-0 rounded bg-white px-2 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-100">
-                      x{item.quantity}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-500">
-                  {getMedicineSummary(order)}
-                </p>
-              )}
-            </div>
-
-            <div className="mt-3 flex min-w-0 justify-end">
-              <Badge tone={getStatusTone(order.status)}>{getStatusLabel(order.status)}</Badge>
-            </div>
+  if (isOrderExpired) {
+    const expiredCard = (
+      <Card className="visit-panel min-w-0 overflow-hidden border-slate-800 text-white">
+        <CardContent className="grid gap-4 p-5 sm:p-6">
+          <div>
+            <p className="text-xs font-medium uppercase text-white/65">Antrean Konsultasi</p>
+            <h2 className="mt-2 text-lg font-semibold">Proses kedaluwarsa</h2>
+            <p className="mt-2 text-sm leading-6 text-white/75">
+              Proses konsultasi dan pembayaran dari hari sebelumnya sudah kedaluwarsa.
+            </p>
           </div>
+          <button
+            type="button"
+            className="inline-flex min-h-11 items-center justify-center rounded-md bg-white px-4 text-sm font-medium text-teal-800 transition hover:bg-teal-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white sm:justify-self-start"
+            onClick={() => {
+              dismissedExpiredOrderIdRef.current = order.id;
+              setOrder(null);
+            }}
+          >
+            Oke
+          </button>
+        </CardContent>
+      </Card>
+    );
 
-          <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-950 p-4 text-white shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs font-medium uppercase text-white/70">Antrean Obat</p>
-                <p className="mt-1 text-3xl font-semibold leading-none">
-                  {order.queueNumber ? formatQueueCode(order.queueNumber) : "-"}
-                </p>
-              </div>
-              <div className="grid size-10 shrink-0 place-items-center rounded-md border border-white/20 bg-white/15">
-                <Ticket className="size-5" />
-              </div>
-            </div>
-            <div className="mt-4 flex items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold">
-              <CheckCircle2 className="size-4 shrink-0" />
-              <span className="min-w-0 truncate">{getStatusLabel(order.status)}</span>
-            </div>
-          </div>
-        </div>
+    return visit ? <>{<QueueStatusCard visit={visit} />}{expiredCard}</> : expiredCard;
+  }
 
-        <div className="relative grid gap-0">
-          {trackingSteps.map((step, index) => (
-            <div key={step.status} className="grid grid-cols-[auto_minmax(0,1fr)] gap-3">
-              <div className="relative flex justify-center">
-                {index < trackingSteps.length - 1 && (
-                  <div className={index < activeStep ? "absolute bottom-0 left-1/2 top-9 w-px -translate-x-1/2 bg-teal-200" : "absolute bottom-0 left-1/2 top-9 w-px -translate-x-1/2 bg-slate-200"} />
-                )}
-                <div className={index <= activeStep ? "relative z-10 grid size-9 place-items-center rounded-md bg-slate-950 text-white" : "relative z-10 grid size-9 place-items-center rounded-md bg-slate-100 text-slate-400"}>
-                  {(() => {
-                    const Icon = index <= activeStep ? getStepIcon(step.status) : Circle;
-                    return <Icon className="size-4" />;
-                  })()}
-                </div>
-              </div>
-              <div className="min-w-0 pb-4">
-                <div className="flex min-w-0 items-center justify-between gap-3">
-                  <p className="font-semibold text-slate-950">{step.label}</p>
-                </div>
-                <p className="mt-1 text-sm leading-6 text-slate-500">{step.description}</p>
-                {step.status === "WAITING_PAYMENT" && order.status === "WAITING_PAYMENT" && order.visit.invoice?.status === "UNPAID" && (
-                  <div className="mt-3 sm:max-w-xs">
-                    <MidtransPaymentButton
-                      key={order.visit.invoice.id}
-                      invoiceId={order.visit.invoice.id}
-                      onPaymentUpdate={loadTracking}
-                    />
-                  </div>
-                )}
-              </div>
+  const pharmacyContent = (
+    <section className="min-w-0 border-t border-white/20 pt-4">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold">Antrean Obat</h2>
+        <span className="whitespace-nowrap text-lg font-semibold">{order.queueNumber ? formatQueueCode(order.queueNumber) : "-"}</span>
+      </div>
+      <ul className="mt-3 divide-y divide-white/15">
+        {medicines.map((item) => (
+          <li key={item.id} className="flex items-start justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <p className="break-words text-sm font-medium">{item.medicine.name}</p>
+              {item.instructions && <p className="mt-1 break-words text-xs text-white/75">{item.instructions}</p>}
             </div>
-          ))}
+            <span className="shrink-0 text-sm">x{item.quantity}</span>
+          </li>
+        ))}
+      </ul>
+      {medicines.length === 0 && <p className="py-3 text-sm text-white/75">Resep obat sedang diproses.</p>}
+      <div className="mt-4 rounded-lg bg-white px-3 py-4 text-slate-950">
+      <ol aria-label="Status obat" className="grid grid-cols-4">
+        {trackingSteps.map((step, index) => {
+          const isComplete = order.status === "COMPLETED" || index < activeStep;
+          const isCurrent = !isComplete && index === activeStep;
+          const Icon = isComplete ? LuCircleCheck : getStepIcon(step.status);
+          const iconClass = isComplete
+            ? "bg-emerald-100 text-emerald-800"
+            : isCurrent
+              ? "bg-yellow-300 text-yellow-950"
+              : "bg-slate-100 text-slate-500";
+          return (
+            <li key={step.status} aria-current={isCurrent ? "step" : undefined} className="relative min-w-0 text-center">
+              {index < trackingSteps.length - 1 && <span aria-hidden="true" className={`absolute left-1/2 top-4 h-px w-full ${isComplete ? "bg-emerald-300" : "bg-slate-200"}`} />}
+              <span className={`relative mx-auto grid size-8 place-items-center rounded-full ${iconClass}`}><Icon aria-hidden="true" className="size-4" /></span>
+              <span className={`mt-2 block px-1 text-xs ${isCurrent ? "font-semibold text-yellow-900" : isComplete ? "text-emerald-800" : "text-slate-500"}`}>
+                {["Bayar", "Disiapkan", "Siap Diambil", "Selesai"][index]}
+                <span className="sr-only">: {isComplete ? "sudah selesai" : isCurrent ? "sedang berlangsung" : "belum dimulai"}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="mt-4 border-t border-slate-100 pt-3 text-center">
+        {order.status === "PREPARING" ? (
+          <PreparationEstimate key={order.id} preparedAt={order.preparedAt} />
+        ) : (
+          <p className="text-xs leading-5 text-slate-600" role="status">{trackingSteps[activeStep].description}</p>
+        )}
+      </div>
+      </div>
+      {order.status === "COMPLETED" && (
+        <button type="button" className="mt-3 min-h-11 w-full rounded-md bg-white px-4 text-sm font-medium text-teal-800 hover:bg-teal-50" onClick={() => setShowDetails(true)}>
+          Lihat Detail Kunjungan
+        </button>
+      )}
+      {showDetails && <VisitDetailsModal key={order.visitId} visitId={order.visitId} onClose={() => setShowDetails(false)} />}
+      {order.status === "WAITING_PAYMENT" && order.visit.invoice?.status === "UNPAID" && (
+        <div className="mt-4">
+          <MidtransPaymentButton key={order.visit.invoice.id} invoiceId={order.visit.invoice.id} onPaymentUpdate={loadTracking} />
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </section>
   );
+
+  // Keep unrelated consultation and pharmacy visits separate.
+  if (visit && visit.id !== order.visitId) {
+    return <><QueueStatusCard visit={visit} /><QueueStatusCard visit={order.visit}>{pharmacyContent}</QueueStatusCard></>;
+  }
+  return <QueueStatusCard visit={visit ?? order.visit}>{pharmacyContent}</QueueStatusCard>;
 }

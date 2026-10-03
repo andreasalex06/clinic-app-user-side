@@ -1,17 +1,26 @@
-import { Clock3, Home, ListPlus, UserRound } from "lucide-react";
+import { LuCircleHelp, LuClock3, LuHouse, LuUserRound } from "react-icons/lu";
 import { motion, useReducedMotion } from "motion/react";
 import type { ElementType } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "../lib/utils";
+import { LogoutButton } from "./LogoutButton";
+
+type PatientNavProps = {
+  patientName?: string;
+};
+
+function getInitial(name?: string) {
+  return name?.charAt(0).toUpperCase() ?? "P";
+}
 
 const navItems = [
-  { to: "/home", label: "Beranda", icon: Home },
-  { to: "/queue", label: "Antrean", icon: ListPlus },
-  { to: "/history", label: "Riwayat", icon: Clock3 },
-  { to: "/account", label: "Akun", icon: UserRound }
+  { to: "/home", label: "Beranda", icon: LuHouse },
+  { to: "/history", label: "Riwayat", icon: LuClock3 },
+  { to: "/faq", label: "FAQ", icon: LuCircleHelp },
+  { to: "/account", label: "Akun", icon: LuUserRound }
 ];
 
-export function PatientNav() {
+export function PatientNav({ patientName }: PatientNavProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const shouldReduceMotion = useReducedMotion();
@@ -19,21 +28,22 @@ export function PatientNav() {
 
   return (
     <>
-      <nav className="hidden rounded-lg border border-slate-200 bg-white p-2 shadow-sm md:block" aria-label="Navigasi pasien desktop" >
-        <div className="flex min-w-0 items-center justify-between gap-4">
+      <nav className="sticky top-0 z-30 hidden w-full border-b border-teal-800 bg-teal-700 shadow-sm md:block" aria-label="Navigasi pasien desktop">
+        <div className="mx-auto flex min-h-16 w-full max-w-6xl min-w-0 items-center justify-between gap-3 px-5 sm:px-7">
           <button
             type="button"
-            className="flex min-w-0 items-center gap-3 rounded-md px-2 py-1.5 text-left"
+            className="flex min-w-0 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left"
             onClick={() => navigate("/home")}
           >
-            <div className="grid size-10 shrink-0 place-items-center rounded-md bg-slate-950 text-white">
-              <Home className="size-5" strokeWidth={2.3} />
+            <div className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-lg bg-white p-1">
+              <img src="/logo.png" alt="" className="size-full object-contain" />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-lg font-semibold text-slate-950">Sarana Medika</p>
+              <p className="truncate text-base font-semibold leading-5 text-white">Sarana Medika</p>
+              <p className="hidden text-[0.65rem] font-medium uppercase tracking-[0.12em] text-teal-100 lg:block">Layanan kesehatan</p>
             </div>
           </button>
-          <div className="flex min-w-0 items-center gap-1">
+          <div className="flex min-w-0 items-center gap-1.5">
             {navItems.map((item) => {
               const Icon = item.icon as ElementType;
               const isActive = item.to === activePath;
@@ -43,31 +53,40 @@ export function PatientNav() {
                   key={item.to}
                   type="button"
                   className={cn(
-                    "relative isolate inline-flex h-10 min-w-0 items-center gap-2 rounded-md px-3 text-sm font-medium text-slate-500 transition-colors hover:text-slate-950",
-                    isActive && "text-slate-950"
+                    "relative isolate inline-flex h-9 min-w-0 items-center gap-1.5 rounded-lg px-2.5 text-[0.8rem] font-medium transition-colors",
+                    isActive ? "text-teal-800 hover:bg-white hover:text-teal-800" : "text-teal-50 hover:bg-white/15 hover:text-white"
                   )}
                   onClick={() => navigate(item.to)}
                 >
                   {isActive && (
                     <motion.span
-                      className="absolute inset-0 -z-10 rounded-md bg-slate-100"
+                      className="absolute inset-0 -z-10 rounded-md bg-white"
                       layoutId="desktop-active-tab"
-                      transition={shouldReduceMotion ? { duration: 0 } : { type: "spring", stiffness: 460, damping: 36 }}
+                      transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                     />
                   )}
-                  <motion.span animate={shouldReduceMotion ? undefined : { scale: isActive ? 1.08 : 1 }} transition={{ duration: 0.16 }}>
-                    <Icon className="size-4 shrink-0" strokeWidth={2.3} />
-                  </motion.span>
+                  <span>
+                    <Icon className="size-[0.95rem] shrink-0" strokeWidth={2.3} />
+                  </span>
                   <span className="relative z-10 truncate">{item.label}</span>
                 </button>
               );
             })}
           </div>
+          <div className="flex min-w-0 items-center gap-2 border-l border-teal-500 px-2">
+            <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-white text-xs font-semibold text-teal-800">
+              {getInitial(patientName)}
+            </div>
+            <p className="hidden max-w-36 truncate text-xs font-semibold text-white md:block">
+              {patientName ?? "Pasien"}
+            </p>
+            <LogoutButton iconOnly />
+          </div>
         </div>
       </nav>
 
-      <nav className="bottom-nav rounded-lg border border-slate-200 bg-white p-1 shadow-sm md:hidden" aria-label="Navigasi pasien mobile">
-        <div className="grid grid-cols-4 gap-1 text-xs font-medium">
+      <nav className="bottom-nav rounded-lg border border-teal-700 bg-teal-700 p-1 shadow-md md:hidden" aria-label="Navigasi pasien mobile">
+        <div className="grid grid-cols-4 gap-1 text-[0.7rem] font-medium">
         {navItems.map((item) => {
           const Icon = item.icon as ElementType;
           const isActive = item.to === activePath;
@@ -77,21 +96,21 @@ export function PatientNav() {
               key={item.to}
               type="button"
               className={cn(
-                "relative isolate grid min-h-14 min-w-0 place-items-center gap-1 rounded-md px-2 py-2 text-slate-500 transition-colors hover:text-slate-950",
-                isActive && "text-slate-950"
+                "relative isolate grid min-h-13 min-w-0 place-items-center gap-1 rounded-lg px-2 py-1.5 transition-colors",
+                isActive ? "text-teal-800 hover:bg-white hover:text-teal-800" : "text-teal-50 hover:bg-white/15 hover:text-white"
               )}
               onClick={() => navigate(item.to)}
             >
               {isActive && (
                 <motion.span
-                  className="absolute inset-0 -z-10 rounded-md bg-slate-100"
+                  className="absolute inset-0 -z-10 rounded-md bg-white"
                   layoutId="mobile-active-tab"
-                  transition={shouldReduceMotion ? { duration: 0 } : { type: "spring", stiffness: 430, damping: 34 }}
+                  transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                 />
               )}
-              <motion.span animate={shouldReduceMotion ? undefined : { y: isActive ? -1 : 0, scale: isActive ? 1.08 : 1 }} transition={{ duration: 0.16 }}>
-                <Icon className="size-5" strokeWidth={2.3} />
-              </motion.span>
+              <span>
+                <Icon className="size-[1.15rem]" strokeWidth={2.3} />
+              </span>
               <span className="relative z-10 truncate">{item.label}</span>
             </button>
           );

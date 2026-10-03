@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
-import { CreditCard, LoaderCircle } from "lucide-react";
+import { LuCreditCard, LuLoaderCircle } from "react-icons/lu";
 import { getApiErrorMessage } from "../api/client";
+import { watchPayment, reportPaymentResult } from "../stores/paymentNoticeStore";
 import { payWithMidtrans } from "../api/midtrans";
 import { Alert } from "./ui/alert";
 import { Button } from "./ui/button";
@@ -9,12 +10,16 @@ type MidtransPaymentButtonProps = {
   invoiceId: string;
   onPaymentUpdate: () => void | Promise<void>;
   label?: string;
+  onPaymentStart?: () => void;
+  onPaymentFinish?: () => void;
 };
 
 export function MidtransPaymentButton({
   invoiceId,
   onPaymentUpdate,
-  label = "Bayar via Midtrans"
+  label = "Bayar",
+  onPaymentStart,
+  onPaymentFinish
 }: MidtransPaymentButtonProps) {
   const paymentInProgress = useRef(false);
   const [paying, setPaying] = useState(false);
@@ -27,7 +32,10 @@ export function MidtransPaymentButton({
     setError("");
 
     try {
-      await payWithMidtrans(invoiceId);
+      onPaymentStart?.();
+      watchPayment(invoiceId);
+      const result = await payWithMidtrans(invoiceId);
+      reportPaymentResult(result);
     } catch (err) {
       setError(getApiErrorMessage(err, "Pembayaran Midtrans gagal dimulai."));
     } finally {
@@ -38,6 +46,7 @@ export function MidtransPaymentButton({
       } finally {
         paymentInProgress.current = false;
         setPaying(false);
+        onPaymentFinish?.();
       }
     }
   }
@@ -50,7 +59,7 @@ export function MidtransPaymentButton({
         aria-busy={paying}
         onClick={() => void handlePayment()}
       >
-        {paying ? <LoaderCircle aria-hidden="true" className="size-4 shrink-0 animate-spin" /> : <CreditCard aria-hidden="true" className="size-4 shrink-0" />}
+        {paying ? <LuLoaderCircle aria-hidden="true" className="size-4 shrink-0 animate-spin" /> : <LuCreditCard aria-hidden="true" className="size-4 shrink-0" />}
         <span>{paying ? "Memproses pembayaran..." : label}</span>
       </Button>
       {error && <Alert tone="error" className="break-words">{error}</Alert>}

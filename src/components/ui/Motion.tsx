@@ -13,9 +13,10 @@ export function ContentMotion({ children, className }: ContentMotionProps) {
   return (
     <motion.div
       className={cn("min-w-0", className)}
-      initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
+      initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
       animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+      exit={shouldReduceMotion ? undefined : { opacity: 0, y: -2 }}
+      transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: [0.22, 1, 0.36, 1] }}
     >
       {children}
     </motion.div>
